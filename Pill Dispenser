@@ -1,0 +1,1299 @@
+#include <Servo.h> // include the Servo library
+#include <Adafruit_GFX.h>    // Core graphics library
+#include <SPI.h>       // this is needed for display
+#include <Adafruit_ILI9341.h>
+#include <Wire.h>      // this is needed for FT6206
+#include <Adafruit_FT6206.h>
+#include <SoftwareSerial.h>
+#include <String.h>
+#include <elapsedMillis.h>
+#include <Time.h>
+#include <TimeAlarms.h>
+
+// The FT6206 uses hardware I2C (SCL/SDA)
+Adafruit_FT6206 ctp = Adafruit_FT6206();
+
+// The display also uses hardware SPI, plus #9 & #10
+#define TFT_CS 49
+#define TFT_DC 48
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
+
+SoftwareSerial gprsSerial(7,8);
+
+int page = 0;
+
+
+int prevpage;
+
+ elapsedMillis timeElapsed; //declare global if you don't want it reset every time loop runs
+unsigned long interval = 5000;
+// create the servo objects
+Servo motor1;
+Servo motor2;
+Servo motor3;
+Servo motor4;
+Servo motor5;
+Servo motor6;
+Servo motor7;
+
+  // Size of the color selection boxes and the paintbrush size
+#define BOXSIZE 40
+
+
+// TONES  ==========================================
+// Start by defining the relationship between 
+//       note, period, &  frequency. 
+#define  c     3830    // 261 Hz 
+#define  d     3400    // 294 Hz 
+#define  e     3038    // 329 Hz 
+#define  f     2864    // 349 Hz 
+#define  g     2550    // 392 Hz 
+#define  a     2272    // 440 Hz 
+#define  b     2028    // 493 Hz 
+#define  C     1912    // 523 Hz 
+// Define a special note, 'R', to represent a rest
+#define  R     0
+
+// Set up speaker on a PWM pin (digital 9, 10 or 11)
+int speakerOut = 10;
+
+
+  // MELODY and TIMING  =======================================
+//  melody[] is an array of notes, accompanied by beats[], 
+//  which sets each note's relative length (higher #, longer note) 
+int melody[] = {  C,  b,  g,  C,  b,   e,  R,  C,  c,  g, a, C };
+int beats[]  = { 16, 16, 16,  8,  8,  16, 32, 16, 16, 16, 8, 8 }; 
+int MAX_COUNT = sizeof(melody) / 2; // Melody length, for looping.
+
+// Set overall tempo
+long tempo = 10000;
+// Set length of pause between notes
+int pause = 1000;
+// Loop variable to increase Rest length
+int rest_count = 100; //<-BLETCHEROUS HACK; See NOTES
+
+// Initialize core variables
+int tone_ = 0;
+int beat = 0;
+long duration  = 0;
+
+
+  // constants won't change. Used here to set a pin number :
+const int ledPin =  40;      // the number of the LED pin
+
+// Variables will change :
+int ledState = LOW;             // ledState used to set the LED
+
+// Generally, you should use "unsigned long" for variables that hold time
+// The value will quickly become too large for an int to store
+unsigned long previousMillis = 0;        // will store last time LED was updated
+
+// constants won't change :
+const long interval1 = 1000;           // interval at which to blink (milliseconds)
+
+void setup()
+{
+ gprsSerial.begin(19200); // GPRS shield baud rate  
+  delay(500);
+  digitalWrite(9,HIGH);
+
+  while (!Serial);     // used for leonardo debugging
+ 
+  Serial.begin(115200);
+  Serial.println(F("Cap Touch Paint!"));
+  
+  tft.begin();
+  
+ if (! ctp.begin(40)) {  // pass in 'sensitivity' coefficient
+    Serial.println("Couldn't start FT6206 touchscreen controller");
+    while (1);
+  }
+  tft.setRotation(1);
+  
+  tft.fillScreen(ILI9341_BLACK);
+
+
+homescreen();
+drawhomeicon(); // draw the home icon
+
+ motor1.attach(30); // attaches the servo on pin 30 to a servo object
+  motor2.attach(31); // attaches the servo on pin 31 to a servo object
+   motor3.attach(32); // attaches the servo on pin 32 to a servo object
+    motor4.attach(33); // attaches the servo on pin 33 to a servo object
+     motor5.attach(34); // attaches the servo on pin 34 to a servo object
+      motor6.attach(35); // attaches the servo on pin 35 to a servo object
+       motor7.attach(36); // attaches the servo on pin 36 to a servo object
+
+  motor1.write(90);
+  motor2.write(90);
+  motor3.write(90);
+  motor4.write(90);
+  motor5.write(90);
+  motor6.write(90);
+  motor7.write(90);
+
+
+  pinMode(speakerOut, OUTPUT); //Speaker declared as output
+
+ // set the digital pin as output:
+  pinMode(ledPin, OUTPUT);
+
+  setTime(8, 00, 00, 18, 11, 2015);
+
+}
+
+
+void loop()
+{
+  if (! ctp.touched()) {
+    return;
+  }
+
+  // Retrieve a point  
+  TS_Point p = ctp.getPoint();
+  
+ /*
+  // Print out raw data from screen touch controller
+  Serial.print("X = "); Serial.print(p.x);
+  Serial.print("\tY = "); Serial.print(p.y);
+  Serial.print(" -> ");
+ */
+
+  // flip it around to match the screen.
+  p.x = map(p.x, 0, 240, 240, 0);
+  p.y = map(p.y, 0, 320, 320, 0);
+  
+  // Print out the remapped (rotated) coordinates
+  Serial.print("("); Serial.print(p.x);
+  Serial.print(", "); Serial.print(p.y);
+  Serial.println(")");
+     
+
+    //HOMESCREEN
+    
+
+    if (page == 0 && p.y < 237 && p.y > 77 && p.x < 220 && p.x > 160){
+      page = 1;
+      redraw();
+      }
+    
+     
+
+      if (page == 1 && p.y < 147 && p.y > 67 && p.x < 150 && p.x > 90) { //if 1 user slected go to 1 User dose selection screen
+          page = 2;
+          USER1();
+          redraw();
+      }
+      
+     
+
+      if (page == 2 && p.y < 100 && p.y > 40 && p.x < 150 && p.x > 90){ //For 1 user if 1 dose selected
+      DOSE1();
+    }
+    
+
+      if (page == 2 && p.y < 200 && p.y > 140 && p.x < 150 && p.x > 90){ //For 1 user if 2 dose selected
+        DOSE2();
+      }
+      
+
+        if (page == 2 && p.y < 300 && p.y > 240 && p.x < 150 && p.x > 90){ //For 1 user 3 dose selected
+        DOSE3();
+        }
+      
+
+
+    if (page == 1 && p.y < 267 && p.y > 187 && p.x < 150 && p.x > 90) { // if 2 user selected go to User 1 dose selection screen
+      page = 3;
+      USER2();
+      redraw();
+    }  
+    
+
+    
+ 
+        if (page == 3 && p.y > 40 && p.y < 100 && p.x > 65 && p.x < 120){ //When on User 1 Dose Selection screen if 1 is touched go to User 2 selection screen
+          page = 4;
+          DOSE11();
+          redraw();
+        }    
+     
+
+     
+
+        if (page == 3 && p.y > 140 && p.y < 200 && p.x > 65 && p.x < 120){ //When on User 1 Dose Selection screen if 2 is touched go to User 2 selection screen
+          page = 5;
+          DOSE12();
+          redraw();
+        }    
+     
+
+     
+  
+        if ( page == 3 && p.y > 240 && p.y < 300 && p.x > 65 && p.x < 120){   //When on User 1 Dose Selection screen if 3 is touched go to User 2 selection screen
+          page = 6;
+          DOSE13();
+          redraw();
+        }    
+     
+
+
+      if (page == 4 && p.y > 40 && p.y < 100 && p.x > 55 && p.x < 110){
+         DOSE21();
+          Two_USER_11();
+
+
+       
+      }
+     
+/*
+      if (page == 4 && p.y > 140 && p.y < 200 && p.x > 50 && p.x < 100){
+      DOSE22();
+        2USER12();
+      }
+      
+
+
+      if (page == 4 && p.y > 240 && p.y < 3000 && p.x > 50 && p.x < 100){
+      DOSE23();
+        2USER13();
+      }
+       
+
+      if (page == 5 && p.y > 40 && p.y < 140 && p.x > 50 && p.x < 100){
+      DOSE21();
+        2USER21();
+      }
+        
+
+      if (page == 5 && p.y > 40 && p.y < 140 && p.x > 50 && p.x < 100){
+      DOSE22();
+        2USER22();
+      }
+        
+
+
+      if (page == 5 && p.y > 40 && p.y < 140 && p.x > 50 && p.x < 100){
+      DOSE23();
+        2USER23();
+      }
+        
+
+
+      if (page == 6 && p.y > 40 && p.y < 140 && p.x > 50 && p.x < 100){
+      DOSE21();
+        2USER31();
+      }
+        
+
+
+      if (page == 6 && p.y > 40 && p.y < 140 && p.x > 50 && p.x < 100){
+      DOSE22();
+        2USER32();
+      }
+        
+
+
+      if (page == 6 && p.y > 40 && p.y < 140 && p.x > 50 && p.x < 100){
+      DOSE23();
+        2USER33();
+      }
+        
+        */
+     if (p.y > 269 && p.y < 320 && p.x > 1 && p.x < 47) { // if the home icon is pressed
+      
+      if (page == 0) { // if you are already on the home page
+        drawhomeiconred(); // draw the home icon red
+        delay(250); // wait a bit
+        drawhomeicon(); // draw the home icon back to white
+        return; // if you were on the home page, stop.
+      }
+      else { // if you are not on the settings, home, or keyboard page
+        page = prevpage; // a value to keep track of what WAS on the screen to redraw/erase only what needs to be
+        page = 0; // make the current page home
+        redraw(); // redraw the page
+      }
+    }
+
+  }
+
+
+void redraw() { // redraw the page
+
+  if (page == 0) { //page 0 is homescreen
+    homescreen();
+  }
+  if (page == 1) { //page 1 is User selection screen
+    USER();
+  }
+  if (page == 2) { //page 2 is 1 User Dose selection screen
+    DOSE();
+  }
+  if (page == 3) { //page 3 is 2 User, User 1 Dose selection screen
+    DOSEALT1();
+   
+  }
+  if (page == 4){ //page 4 is 2 User, User 1 selected 1 Dose, User 2 Dose selection screen
+    DOSEALT21();
+  }
+  
+  if (page == 5){ // page 5 is 2 User, User 1 selected 2 Dose, User 2 Dose selection screen
+    DOSEALT22();
+  }
+
+  if (page == 6){ // page 6 is 2 User, User 1 selected 3 dose, User 2 Dose Selection screen
+    DOSEALT23();
+  }
+
+   if (page == 7){ // page 7 is User 1 Acceptance Screen for column 1
+    USER1Accept1();
+  }
+   
+   if (page == 8){ // page 8  is User 1 Acceptance Screen for column 2
+    USER1Accept2();
+  }
+
+ if (page == 9){ // page 9 is  is User 1 Acceptance Screen for column 3
+    USER1Accept3();
+  }
+  
+  if (page == 10){ // page 10  is User 2 Acceptance Screen for column 4
+    USER2Accept4();
+     }
+
+ if (page == 11){ // page 11 is  is User 2 Acceptance Screen for column 5
+   USER2Accept5();
+  }
+
+
+ if (page == 12){ // page 12  is User 2 Acceptance Screen for column 6
+    USER2Accept6();
+  }
+
+}
+
+void homescreen(){ //Screen with "START" button to begin the setup process
+  
+tft.fillScreen(ILI9341_BLACK);
+  tft.fillRect(77, 20, BOXSIZE*4, BOXSIZE*2, ILI9341_WHITE);
+    tft.setCursor(90, 50);
+    tft.setTextColor(ILI9341_BLACK);
+    tft.setTextSize(5);
+    tft.println("Start");
+    
+    drawhomeicon();
+}
+void USER(){ // Screen to select either 1 or 2 users
+
+tft.fillScreen(ILI9341_BLACK);
+
+    tft.fillRect(67, 40,BOXSIZE*5, BOXSIZE, ILI9341_WHITE);
+    tft.setCursor(70,55);
+      tft.setTextColor(ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.println("How Many Users?");
+      
+   tft.fillRect(67, 90, BOXSIZE*2, BOXSIZE*1.5, ILI9341_WHITE);
+         tft.setCursor(100,110);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+
+       tft.fillRect(187, 90, BOXSIZE*2, BOXSIZE*1.5, ILI9341_WHITE);
+        tft.setCursor(220,110);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+
+       drawhomeicon();
+}
+void USER1(){ //Button 1 flashes green to show it was touched
+  tft.fillRect(67, 90, BOXSIZE*2, BOXSIZE*1.5, ILI9341_GREEN);
+       tft.setCursor(100,110);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+       delay(250);
+       tft.fillRect(67, 90, BOXSIZE*2, BOXSIZE*1.5, ILI9341_WHITE);
+         tft.setCursor(100,110);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+}
+ void USER2(){ //Button 2 flashes green to show it was touched
+  tft.fillRect(187, 90, BOXSIZE*2, BOXSIZE*1.5, ILI9341_GREEN);
+       tft.setCursor(220,110);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+       delay(250);
+       tft.fillRect(187, 90, BOXSIZE*2, BOXSIZE*1.5, ILI9341_WHITE);
+        tft.setCursor(220,110);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+ }
+void DOSE(){ //The Dose Selection screen for the user 1 if 1 User is selected
+  
+tft.fillScreen(ILI9341_BLACK);
+  
+    tft.fillRect(67, 40,BOXSIZE*5, BOXSIZE, ILI9341_WHITE);
+    tft.setCursor(70,55);
+      tft.setTextColor(ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.println("How Many Doses?");
+
+    tft.fillRect(40, 90, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(60,120);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+
+         tft.fillRect(140, 90, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(160,120);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+
+        tft.fillRect(240, 90, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(260,120);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("3");
+
+       drawhomeicon();
+} 
+void DOSEALT1(){ //The Dose Selection screen for the user 1 if 2 Users is selected
+  
+tft.fillScreen(ILI9341_BLACK);
+  
+    tft.fillRect(67, 20,BOXSIZE*5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(70,25);
+      tft.setTextColor(ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.println("How Many Doses");
+      tft.setCursor(70,55);
+      tft.setTextColor(ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.println("For User 1?");
+
+    tft.fillRect(40, 120, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(60,140);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+
+         tft.fillRect(140, 120, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(160,140);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+
+        tft.fillRect(240, 120, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(260,140);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("3");
+
+       drawhomeicon();
+} 
+
+void DOSE11(){ //Button 1 flashes green to show it was touched
+tft.fillRect(40, 120, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_GREEN);
+    tft.setCursor(60,140);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+       tft.fillRect(40, 120, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(60,140);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+}
+
+void DOSE12(){ //Button 2 flashes green to show it was touched
+tft.fillRect(140, 120, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_GREEN);
+    tft.setCursor(160,140);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+       tft.fillRect(140, 120, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(160,140);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+}
+
+void DOSE13(){ //Button 3 flashes green to show it was touched
+tft.fillRect(240, 120, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_GREEN);
+    tft.setCursor(260,140);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("3");
+       tft.fillRect(240, 120, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(260,140);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("3");
+}
+
+void DOSEALT21(){ // the screen drawn after user 1 selects 1 dose
+  
+tft.fillScreen(ILI9341_BLACK);
+  
+    tft.fillRect(67, 20,BOXSIZE*5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(70,25);
+      tft.setTextColor(ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.println("How Many Doses");
+      tft.setCursor(70,55);
+      tft.setTextColor(ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.println("For User 2?");
+
+    tft.fillRect(40, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(60,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+
+         tft.fillRect(140, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(160,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+
+        tft.fillRect(240, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(260,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("3");
+
+       drawhomeicon();
+}
+
+void DOSEALT22(){ // the screen drawn after user 1 selects 2 doses
+  
+tft.fillScreen(ILI9341_BLACK);
+  
+    tft.fillRect(67, 20,BOXSIZE*5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(70,25);
+      tft.setTextColor(ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.println("How Many Doses");
+      tft.setCursor(70,55);
+      tft.setTextColor(ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.println("For User 2?");
+
+    tft.fillRect(40, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(60,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+
+         tft.fillRect(140, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(160,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+
+        tft.fillRect(240, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(260,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("3");
+
+       drawhomeicon();
+}
+
+void DOSEALT23(){ // the screen drawn after user 1 selects 3 doses
+  
+tft.fillScreen(ILI9341_BLACK);
+  
+    tft.fillRect(67, 20,BOXSIZE*5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(70,25);
+      tft.setTextColor(ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.println("How Many Doses");
+      tft.setCursor(70,55);
+      tft.setTextColor(ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.println("For User 2?");
+
+    tft.fillRect(40, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(60,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+
+         tft.fillRect(140, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(160,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+
+        tft.fillRect(240, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(260,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("3");
+
+       drawhomeicon();
+}
+ void DOSE1(){ //Button 1 flashes green to show it was touched
+  tft.fillRect(40, 90, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_GREEN);
+    tft.setCursor(60,120);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+       delay(250);
+       tft.fillRect(40, 90, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(60,120);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+ }
+ 
+ void DOSE2(){ //Button 2 flashes green to show it was touched
+  tft.fillRect(140, 90, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_GREEN);
+    tft.setCursor(160,120);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+       delay(250);
+       tft.fillRect(140, 90, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(160,120);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+ }
+ 
+ void DOSE3(){ //Button 3 flashes green to show it was touched
+  tft.fillRect(240, 90, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_GREEN);
+    tft.setCursor(260,120);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("3");
+       delay(250);
+       tft.fillRect(240, 90, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(260,120);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("3");
+ }
+
+void DOSE21(){ //Button 1 flashes green to show it was touched
+    tft.fillRect(40, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_GREEN);
+    tft.setCursor(60,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+         tft.fillRect(40, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(60,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("1");
+}
+
+void DOSE22(){ //Button 2 flashes green to show it was touched
+    tft.fillRect(140, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_GREEN);
+    tft.setCursor(160,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+         tft.fillRect(140, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(160,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("2");
+}
+
+void DOSE23(){ //Button 3 flashes green to show it was touched
+    tft.fillRect(240, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_GREEN);
+    tft.setCursor(260,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("3");
+         tft.fillRect(240, 140, BOXSIZE*1.5, BOXSIZE*1.5, ILI9341_WHITE);
+    tft.setCursor(260,160);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("3");
+}
+ void USER1Accept1(){ //If User 1 is accepting dose from Column 1
+  tft.fillScreen(ILI9341_BLACK);
+  tft.fillRect(60, 40, BOXSIZE*5, BOXSIZE*4, ILI9341_YELLOW);
+    tft.setCursor(100,70);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("User 1");
+       tft.setCursor(70,130);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(2);
+       tft.println("Touch to Accept");
+
+
+ }
+
+  void USER1Accept2(){ //If User 1 is accepting dose from Column 2
+    tft.fillScreen(ILI9341_BLACK);
+  tft.fillRect(40, 90, BOXSIZE*5, BOXSIZE*4, ILI9341_YELLOW);
+    tft.setCursor(60,170);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("User 1 - Press to Accept");
+
+ }
+
+  void USER1Accept3(){ //If User 1 is accepting dose from Column 3
+    tft.fillScreen(ILI9341_BLACK);
+  tft.fillRect(40, 90, BOXSIZE*5, BOXSIZE*4, ILI9341_YELLOW);
+    tft.setCursor(60,170);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("User 1 - Press to Accept");
+
+ }
+
+ void USER2Accept4(){ //If User 2 is accepting dose from Column 4
+  tft.fillScreen(ILI9341_BLACK);
+  tft.fillRect(40, 90, BOXSIZE*5, BOXSIZE*4, ILI9341_CYAN);
+    tft.setCursor(60,170);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("User 2 - Press to Accept");
+
+ }
+
+  void USER2Accept5(){ //If User 2 is accepting dose from Column 5
+    tft.fillScreen(ILI9341_BLACK);
+  tft.fillRect(40, 90, BOXSIZE*5, BOXSIZE*4, ILI9341_CYAN);
+    tft.setCursor(60,170);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("User 2 - Press to Accept");
+
+ }
+
+  void USER2Accept6(){ //If User 2 is accepting dose from Column 6
+    tft.fillScreen(ILI9341_BLACK);
+  tft.fillRect(40, 90, BOXSIZE*5, BOXSIZE*4, ILI9341_CYAN);
+    tft.setCursor(60,170);
+       tft.setTextColor(ILI9341_BLACK);
+       tft.setTextSize(3);
+       tft.println("User 2 - Press to Accept");
+
+ }
+
+ 
+void drawhomeicon() { // draws a white home icon
+  tft.drawLine(280, 219, 299, 200, ILI9341_WHITE);
+  tft.drawLine(300, 200, 304, 204, ILI9341_WHITE);
+  tft.drawLine(304, 203, 304, 200, ILI9341_WHITE);
+  tft.drawLine(305, 200, 307, 200, ILI9341_WHITE);
+  tft.drawLine(308, 200, 308, 208, ILI9341_WHITE);
+  tft.drawLine(309, 209, 319, 219, ILI9341_WHITE);
+  tft.drawLine(281, 219, 283, 219, ILI9341_WHITE);
+  tft.drawLine(316, 219, 318, 219, ILI9341_WHITE);
+  tft.drawRect(284, 219, 32, 21, ILI9341_WHITE);
+  tft.drawRect(295, 225, 10, 15, ILI9341_WHITE);
+}
+
+void drawhomeiconred() { // draws a red home icon
+  tft.drawLine(280, 219, 299, 200, ILI9341_RED);
+  tft.drawLine(300, 200, 304, 204, ILI9341_RED);
+  tft.drawLine(304, 203, 304, 200, ILI9341_RED);
+  tft.drawLine(305, 200, 307, 200, ILI9341_RED);
+  tft.drawLine(308, 200, 308, 208, ILI9341_RED);
+  tft.drawLine(309, 209, 319, 219, ILI9341_RED);
+  tft.drawLine(281, 219, 283, 219, ILI9341_RED);
+  tft.drawLine(316, 219, 318, 219, ILI9341_RED);
+  tft.drawRect(284, 219, 32, 21, ILI9341_RED);
+  tft.drawRect(295, 225, 10, 15, ILI9341_RED);
+}
+
+void Servo1(){
+  motor1.write(50);
+  delay(500);
+  motor1.write(90);
+}
+
+void Servo1Reset(){
+  motor1.write(130);
+  delay(3500);
+  motor1.write(90);
+}
+
+void Servo2(){
+  motor2.write(50);
+  delay(500);
+  motor2.write(90);
+}
+
+void Servo2Reset(){
+  motor2.write(130);
+  delay(3500);
+  motor2.write(90);
+}
+void Servo3(){
+  motor3.write(50);
+  delay(500);
+  motor3.write(90);
+}
+
+void Servo3Reset(){
+  motor3.write(130);
+  delay(3500);
+  motor3.write(90);
+}
+void Servo4(){
+  motor4.write(50);
+  delay(500);
+  motor4.write(90);
+}
+void Servo4Reset(){
+  motor4.write(130);
+  delay(3500);
+  motor4.write(90);
+}
+
+void Servo5(){
+  motor5.write(50);
+  delay(500);
+  motor5.write(90);
+}
+void Servo5Reset(){
+  motor5.write(130);
+  delay(3500);
+  motor5.write(90);
+}
+
+void Servo6(){
+  motor6.write(50);
+  delay(500);
+  motor6.write(90);
+}
+void Servo6Reset(){
+  motor6.write(130);
+  delay(3500);
+  motor6.write(90);
+}
+
+void Servo7(){
+  motor7.write(50);
+  delay(1000);
+  motor7.write(90);
+}
+void Servo7Reset(){
+  motor7.write(130);
+  delay(1000);
+  motor7.write(90);
+}
+
+void SendTextMessageTaken() //When dose is taken send text to care taker "Dose Has Been Taken"
+{
+  
+  gprsSerial.print("AT+CMGF=1\r"); // Set the shield to SMS mode
+  delay(100);
+  // send sms message, the phone number needs to include the country code e.g. if a U.S. phone number such as (540) 898-5543 then the string must be:
+  // +15408985543
+  gprsSerial.println("AT+CMGS = \"+12104642308\"");
+  delay(100);
+  gprsSerial.println("Dose Has Been Taken"); //the content of the message
+  delay(100);
+  gprsSerial.print((char)26);//the ASCII code of the ctrl+z is 26 (required according to the datasheet)
+  delay(100);
+  gprsSerial.println();
+}
+ 
+void SendTextMessageReject() //When dose is missed send text to care taker "Dose Was Not Taken"
+{
+  
+  gprsSerial.print("AT+CMGF=1\r"); // Set the shield to SMS mode
+  delay(100);
+  // send sms message, the phone number needs to include the country code e.g. if a U.S. phone number such as (540) 898-5543 then the string must be:
+  // +15408985543
+  gprsSerial.println("AT+CMGS = \"+12104642308\"");
+  delay(100);
+  gprsSerial.println("Dose Was Not Taken"); //the content of the message
+  delay(100);
+  gprsSerial.print((char)26);//the ASCII code of the ctrl+z is 26 (required according to the datasheet)
+  delay(100);
+  gprsSerial.println();
+}
+
+
+void BlinkLED() //Visual Alert Start
+{
+    // check to see if it's time to blink the LED; that is, if the
+  // difference between the current time and last time you blinked
+  // the LED is bigger than the interval at which you want to
+  // blink the LED.
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - previousMillis >= interval1) {
+    // save the last time you blinked the LED
+    previousMillis = currentMillis;
+
+    // if the LED is off turn it on and vice-versa:
+    if (ledState == LOW) {
+      ledState = HIGH;
+    } else {
+      ledState = LOW;
+    }
+
+    // set the LED with the ledState of the variable:
+    digitalWrite(ledPin, ledState);
+  }        // wait for a second
+}
+
+
+void STOPBlinkLED()
+{
+  digitalWrite(40,LOW);
+}
+
+// PLAY TONE  ==============================================
+// Pulse the speaker to play a tone for a particular duration
+void playTone() {
+  long elapsed_time = 0;
+  if (tone_ > 0) { // if this isn't a Rest beat, while the tone has 
+    //  played less long than 'duration', pulse speaker HIGH and LOW
+    while (elapsed_time < duration) {
+
+      digitalWrite(speakerOut,HIGH);
+      delayMicroseconds(tone_ / 2);
+
+      // DOWN
+      digitalWrite(speakerOut, LOW);
+      delayMicroseconds(tone_ / 2);
+
+      // Keep track of how long we pulsed
+      elapsed_time += (tone_);
+    } 
+  }
+  else { // Rest beat; loop times delay
+    for (int j = 0; j < rest_count; j++) { // See NOTE on rest_count
+      delayMicroseconds(duration);  
+    }                                
+  }                                 
+}
+
+
+void stopTone(){
+  digitalWrite(speakerOut, LOW);
+}
+
+
+
+
+void MoveCol1(){
+
+  timeElapsed = 0;
+  playTone;
+  BlinkLED;
+  page = 7;
+  redraw;
+  
+  
+  
+  
+   if (! ctp.touched()) {
+    return;
+  }
+
+  // Retrieve a point  
+  TS_Point p = ctp.getPoint();
+  
+
+  // flip it around to match the screen.
+  p.x = map(p.x, 0, 240, 240, 0);
+  p.y = map(p.y, 0, 320, 320, 0);
+  
+
+
+   
+    if(page == 7 && timeElapsed < interval && p.y > 40 && p.y < 240 && p.x > 90 && p.x < 250){
+      stopTone;
+      STOPBlinkLED;
+      Servo7;
+      Servo1;
+      Servo7Reset;
+      SendTextMessageTaken;
+    }
+    
+
+
+    else if(page == 7 && timeElapsed > interval){
+      stopTone;
+      STOPBlinkLED;
+      Servo1;
+      SendTextMessageReject;
+
+  
+}
+}
+
+
+void MoveCol2(){
+  page = 8;
+  redraw;
+  timeElapsed = 0;
+  playTone();
+  BlinkLED();
+   if (! ctp.touched()) {
+    return;
+  }
+
+  // Retrieve a point  
+  TS_Point p = ctp.getPoint();
+  
+
+  // flip it around to match the screen.
+  p.x = map(p.x, 0, 240, 240, 0);
+  p.y = map(p.y, 0, 320, 320, 0);
+  
+
+
+    if(page == 8 && timeElapsed < interval && p.y > 40 && p.y < 240 && p.x > 90 && p.x < 250){
+      stopTone;
+      STOPBlinkLED;
+      Servo7();
+      Servo2();
+      Servo7Reset();
+      SendTextMessageTaken();
+    }
+    
+
+    else if (page == 8 && timeElapsed > interval){
+      stopTone;
+      STOPBlinkLED;
+      Servo2();
+      SendTextMessageReject();
+  }
+  
+}
+
+void MoveCol3(){
+  page = 9;
+  redraw;
+  timeElapsed = 0;
+  playTone();
+  BlinkLED();
+   if (! ctp.touched()) {
+    return;
+  }
+
+  // Retrieve a point  
+  TS_Point p = ctp.getPoint();
+  
+
+  // flip it around to match the screen.
+  p.x = map(p.x, 0, 240, 240, 0);
+  p.y = map(p.y, 0, 320, 320, 0);
+  
+
+
+    if(page == 9 && timeElapsed < interval && p.y > 40 && p.y < 240 && p.x > 90 && p.x < 250){
+      stopTone;
+      STOPBlinkLED;
+      Servo7();
+      Servo3();
+      Servo7Reset();
+      SendTextMessageTaken();
+    }
+    
+
+    else if (page == 9 && timeElapsed > interval){
+      stopTone;
+      STOPBlinkLED;
+      Servo3();
+      SendTextMessageReject();
+  }
+  
+}
+
+void MoveCol4(){
+
+    timeElapsed = 0;
+     page = 10;
+     redraw;
+     playTone;
+     BlinkLED;
+     
+     
+
+   if (! ctp.touched()) {
+    return;
+  }
+
+  // Retrieve a point  
+  TS_Point p = ctp.getPoint();
+  
+
+  // flip it around to match the screen.
+  p.x = map(p.x, 0, 240, 240, 0);
+  p.y = map(p.y, 0, 320, 320, 0);
+  
+
+
+    
+    if(page == 10 &&  timeElapsed < interval && p.y > 40 && p.y < 240 && p.x > 90 && p.x < 250){
+      stopTone;
+      STOPBlinkLED;
+      Servo7();
+      Servo4();
+      Servo7Reset();
+      SendTextMessageTaken();
+    }
+    
+
+
+    else if(page == 10 && timeElapsed > interval){
+      stopTone;
+      STOPBlinkLED;
+      Servo4();
+      SendTextMessageReject();
+
+  
+  
+  
+}
+}
+
+
+void MoveCol5(){
+  page = 11;
+  redraw;
+  timeElapsed = 0;
+  playTone();
+  BlinkLED();
+   if (! ctp.touched()) {
+    return;
+  }
+
+  // Retrieve a point  
+  TS_Point p = ctp.getPoint();
+  
+
+  // flip it around to match the screen.
+  p.x = map(p.x, 0, 240, 240, 0);
+  p.y = map(p.y, 0, 320, 320, 0);
+  
+
+
+    if(page = 11 && timeElapsed < interval && p.y > 40 && p.y < 240 && p.x > 90 && p.x < 250){
+      stopTone;
+      STOPBlinkLED;
+      Servo7();
+      Servo5();
+      Servo7Reset();
+      SendTextMessageTaken();
+    }
+    
+
+    else if (page == 11 && timeElapsed > interval){
+      stopTone;
+      STOPBlinkLED;
+      Servo5();
+      SendTextMessageReject();
+  }
+
+}
+
+void MoveCol6(){
+  page = 12;
+  redraw;
+  timeElapsed = 0;
+  playTone();
+  BlinkLED();
+   if (! ctp.touched()) {
+    return;
+  }
+
+  // Retrieve a point  
+  TS_Point p = ctp.getPoint();
+  
+
+  // flip it around to match the screen.
+  p.x = map(p.x, 0, 240, 240, 0);
+  p.y = map(p.y, 0, 320, 320, 0);
+  
+
+    if(page == 12 && timeElapsed < interval && p.y > 40 && p.y < 240 && p.x > 90 && p.x < 250){
+      stopTone;
+      STOPBlinkLED;
+      Servo7();
+      Servo6();
+      Servo7Reset();
+      SendTextMessageTaken();
+    }
+    
+
+    else if (page == 12 && timeElapsed > interval){
+      stopTone;
+      STOPBlinkLED;
+      Servo6();
+      SendTextMessageReject();
+  }
+
+}
+
+void Two_USER_11(){
+
+  delay(5000); 
+
+  MoveCol1();
+
+  delay(5000);
+  
+  MoveCol4();
+
+  delay(5000);
+
+  MoveCol1();
+
+  delay(5000);
+  
+  MoveCol4();
+
+  delay(5000);
+  
+  MoveCol1();
+
+  delay(5000);
+  
+  MoveCol4();
+
+  delay(5000);
+
+  MoveCol1();
+
+  delay(5000);
+  
+  MoveCol4();
+
+  delay(5000);
+
+  MoveCol1();
+
+  delay(5000);
+  
+  Servo1Reset();
+
+  delay(5000);
+  
+  MoveCol4();
+
+  delay(5000);
+  
+  Servo6Reset();
+  
+  
+
+ 
+  page = prevpage; // a value to keep track of what WAS on the screen to redraw/erase only what needs to be
+        page = 0; // make the current page home
+        redraw(); // redraw the page
+}
